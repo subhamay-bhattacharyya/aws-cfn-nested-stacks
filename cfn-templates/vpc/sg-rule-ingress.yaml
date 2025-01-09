@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  CFN Nested Template to create a Security Group Rule Ingress for a VPC
+
+Metadata:
+  TemplateName: sg-rule-ingress.yaml
+  TemplateType: Security Group Rule Ingress
+  Description: >-
+    This CloudFormation template defines a security group rule for ingress traffic within a specified VPC.
+  Version: 1.0.0
+  Owner: Subhamay Bhattacharyya
+  ProjectName: Nested Stack Templates Collection
+  Modification History:
+    - 1.0.0  Jan 08, 2025  --  Initial Version
+  StepsToTest: Manually verify the Stack.
+  StepsToCleanup: Stack delete command
+
+  Parameters:
+    ProjectName: The Project name to be used as a resource tag value. Must be 5-30 characters long and contain only lowercase alphabets.
+    Environment: The Environment name to be used as a resource tag value. Allowed values are "devl", "test", "prod".
+    GitHubRef: GitHub Ref name to be used as a resource tag value. Can contain alphanumeric characters, slashes, underscores, and hyphens.
+    GitHubURL: GitHub URL to be used as a resource tag value. Must start with 'https://github.com/' and can contain alphanumeric characters, dots, underscores, and hyphens.
+    GitHubWFRunNumber: The Workflow run number to be used as a resource tag value.
+    GitHubSHA: The SHA value of the last commit to be used as a resource tag value. Must be a 40-character hexadecimal string.
+    GitHubRepository: The GitHub Repository name to be used as a resource tag value. Must be 10-30 characters long, contain lowercase letters, numbers, dashes, and start with a letter.
+    VpcId: The ID of the VPC. Must be in the form 'vpc-' followed by alphanumeric characters.
+    SecurityGroupBaseName: The base name for the security group. Can contain alphanumeric characters, hyphens, and underscores.
+    SecurityGroupDescription: The description for the security group. Can contain alphanumeric characters, spaces, hyphens, underscores, and punctuation.
+
+    Resources:
+      SecurityGroup: An AWS EC2 Security Group with properties for GroupName, GroupDescription, VpcId, and Tags.
+
+    Outputs:
+      SecurityGroupId: The ID of the created EC2 Security Group.
+      SecurityGroupVpcId: The VPC ID of the created EC2 Security Group.
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      ################################## Security Group ############################################
+      - Label:
+          default: "Security Group:"
+        Parameters:
+          - SecurityGroupId
+          - IPProtocol
+          - FromPort
+          - ToPort
+          - CidrIp
+          - CidrIpv6
+          - SourceSecurityGroupId
+          - RuleDescription
+          - EnableIPV6Cidr
+    ParameterLabels:
+      ################################## Security Group Rule #######################################
+      SecurityGroupId:
+        default: "Security Group ID."
+      IPProtocol:
+        default: "IP Protocol."
+      FromPort:
+        default: "From Port."
+      ToPort:
+        default: "To Port."
+      CidrIp:
+        default: "IPv4 CIDR Block."
+      CidrIpv6:
+        default: "IPv6 CIDR Block."
+      SourceSecurityGroupId:
+        default: "Source Security Group ID."
+      RuleDescription:
+        default: "Rule Description."
+      EnableIPV6Cidr:
+        default: "Enable IPv6 CIDR Block."
+
+
+Parameters:
+  ###################################### Security Group ############################################
+  SecurityGroupId:
+    Default: "sg-00000000000000000"
+    Type: String
+  IPProtocol:
+    Default: "icmp"
+    Type: String
+    AllowedValues:
+    - "icmp"
+    - "tcp"
+  FromPort:
+    Default: -1
+    Type: Number
+  ToPort:
+    Default: -1
+    Type: Number
+  CidrIp:
+    Default: "0.0.0.0/0"
+    Type: String
+  CidrIpv6:
+    Default: "::/0"
+    Type: String
+  SourceSecurityGroupId:
+    Type: String
+  RuleDescription:
+    Default: "Open up ports for ICMP"
+    Type: String
+  EnableIPV6Cidr:
+    Default: "false"
+    Type: String
+    AllowedValues:
+    - "true"
+    - "false"
+
+######################################## Conditions ################################################
+Conditions:
+  EnableIPV6Cidr: !Equals [!Ref EnableIPV6Cidr, "true"]
+  SourceSecurityGroup: !Not
+    - !Equals
+      - !Ref SourceSecurityGroupId
+      - ""
+
+  NotSourceSecurityGroup:  !Equals
+      - !Ref SourceSecurityGroupId
+      - ""
+Resources:
+  ######################################  Security Group Ingress Rule ##############################
+  SecurityGroupRuleIPV4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroupId
+      IpProtocol: !Ref IPProtocol
+      FromPort: !Ref FromPort
+      ToPort: !Ref ToPort
+      CidrIp:  !If [ NotSourceSecurityGroup, !Ref CidrIp, !Ref 'AWS::NoValue' ]
+      SourceSecurityGroupId: !If [ SourceSecurityGroup, !Ref SourceSecurityGroupId, !Ref 'AWS::NoValue' ]
+      Description: !Ref RuleDescription
+  SecurityGroupRuleIPV6:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: EnableIPV6Cidr
+    Properties:
+      GroupId: !Ref SecurityGroupId
+      IpProtocol: !Ref IPProtocol
+      FromPort: !Ref FromPort
+      ToPort: !Ref ToPort
+      CidrIpv6: !If [ NotSourceSecurityGroup, !Ref CidrIpv6, !Ref 'AWS::NoValue' ]
+      SourceSecurityGroupId:  !If [ SourceSecurityGroup, !Ref SourceSecurityGroupId, !Ref 'AWS::NoValue' ]
+      Description: !Ref RuleDescription
+Outputs:
+  ###################################### Security Group ############################################
+  SecurityGroupRuleId:
+    Description: Security Group Rule ID
+    Value: !Ref SecurityGroupRuleIPV4

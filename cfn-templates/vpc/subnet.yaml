@@ -1,0 +1,320 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  CFN Nested Template to create a Subnet
+
+Metadata:
+  TemplateName: subnet.yaml
+  TemplateType: Subnet (public / private)
+  Description: >
+    This CloudFormation template creates a VPC subnet with optional IPv6 support and public/private subnet configuration.
+    It includes parameters for project and environment details, GitHub attributes, and subnet-specific configurations.
+    The template also defines conditions for public subnet and IPv6 CIDR block, and resources for subnet, IPv6 CIDR block,
+    internet gateway attachment, route table, and route table association.
+    Outputs include subnet ID, availability zone, CIDR block, network ACL association ID, and route table association ID.
+    The template is designed to be used as a nested stack in a VPC template.
+  Version: 1.0.0
+  Owner: Subhamay Bhattacharyya
+  ProjectName: Nested Stack Templates Collection
+  Modification History:
+    - 1.0.0  Jan 06, 2025  --  Initial Version
+  StepsToTest: Manually verify the Stack.
+  StepsToCleanup: Stack delete command
+
+  Parameters:
+    ProjectName: The Project name to be used as a resource tag value.
+    Environment: The Environment name to be used as a resource tag value.
+    GitHubRef: GitHub Ref name to be used as a resource tag value.
+    GitHubURL: GitHub URL to be used as a resource tag value.
+    GitHubWFRunNumber: The Workflow run number to be used as a resource tag value.
+    GitHubSHA: The SHA value of the last commit to be used as a resource tag value.
+    GitHubRepository: The GitHub Repository name to be used as a resource tag value.
+    CiBuild: CI Build of the feature branch to be appended to a resource name.
+    VpcId: The ID of the VPC.
+    SubnetCidrBlock: Subnet CIDR Block.
+    SubnetSequence: The sequence number of the subnet.
+    InternetGatewayId: The ID of the attached Internet Gateway.
+    IsPublicSubnet: Indicates if this is a public subnet.
+    EnableIPV6Cidr: Indicates if IPv6 CIDR is enabled.
+
+    Conditions:
+      IsPublicSubnet: Checks if the subnet is public.
+      EnableIPV6Cidr: Checks if IPv6 CIDR is enabled.
+
+    Resources:
+      Subnet: Creates an AWS::EC2::Subnet resource with specified properties and tags.
+      IPv6CidrBlock: Creates an AWS::EC2::VPCCidrBlock resource for IPv6 CIDR block if enabled.
+      AttachInternetGateway: Creates an AWS::EC2::VPCGatewayAttachment resource to attach the internet gateway if the subnet is public.
+      RouteTable: Creates an AWS::EC2::RouteTable resource with specified properties and tags.
+      RouteTableAssociation: Creates an AWS::EC2::SubnetRouteTableAssociation resource to associate the subnet with the route table.
+
+    Outputs:
+      SubnetId: The ID of the created subnet.
+      SubnetAvailabilityZone: The availability zone of the subnet.
+      SubnetAvailabilityZoneId: The availability zone ID of the subnet.
+      SubnetCidrBlock: The CIDR block of the subnet.
+      SubnetNetworkAclAssociationId: The network ACL association ID of the subnet.
+      SubnetRouteTableAssociationId: The route table association ID of the subnet.
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      #################################### Project Name and Environment ##############################
+      - Label:
+          default: "Project Name and Environment:"
+        Parameters:
+          - ProjectName
+          - Environment
+      #################################### GitHub Attributes #########################################
+      - Label:
+          default: "GitHub Attributes:"
+        Parameters:
+          - GitHubRef
+          - GitHubURL
+          - GitHubWFRunNumber
+          - GitHubSHA
+          - GitHubRepository
+          - CiBuild
+      #################################### VPC #######################################################
+      - Label:
+          default: "VPC Configuration:"
+        Parameters:
+          - VpcId
+          - SubnetCidrBlock
+          - NetworkAclId
+          - IsPublicSubnet
+          - EnableIPV6Cidr
+    ParameterLabels:
+      #################################### Project Name and Environment ##############################
+      ProjectName:
+        default: "Project Name."
+      Environment:
+        default: "Environment Name."
+      #################################### GitHub Attributes #########################################
+      GitHubRef:
+        default: "GitHub Ref."
+      GitHubURL:
+        default: "GitHub URL."
+      GitHubWFRunNumber:
+        default: "GitHub Workflow Run Number."
+      GitHubSHA:
+        default: "GitHub SHA"
+      GitHubRepository:
+        default: "GitHub Repository."
+      CiBuild:
+        default: "Ci Build."
+      ################################## Subnet Attributes #########################################
+      VpcId:
+        default: "VPC ID."
+      SubnetCidrBlock:
+        default: "Subnet IPV4 CI/DR Block."
+      NetworkAclId:
+        default: "Network ACL ID."
+      IsPublicSubnet:
+        default: "Public Subnet?"
+      EnableIPV6Cidr:
+        default: "Enable IPV6 CIDR?"
+
+Parameters:
+  ############################################ Project Name and Environment #####################
+  ProjectName:
+    Default: project
+    Description: "The Project name to be used as a resource tag value."
+    Type: String
+    MinLength: 5
+    MaxLength: 30
+    AllowedPattern: "[a-z]*"
+    ConstraintDescription: "The length should be between 5 and 30, must contain only lowercase alphabets."
+  Environment:
+    Default: devl
+    Description: "The Environment name to be used as a resource tag value."
+    Type: String
+    AllowedValues: ["devl", "test", "prod"]
+    ConstraintDescription: "The Environment must be devl / test or prod"
+  ###################################### GitHub Attributes #########################################
+  GitHubRef:
+    Default: ref_name
+    Description: "GitHub Ref name to be used as a resource tag value."
+    Type: String
+    AllowedPattern: "^[a-zA-Z0-9/_-]+$"
+    ConstraintDescription: "The GitHub Ref Name can only contain alphanumeric characters, slashes, underscores, and hyphens."
+  GitHubURL:
+    Default: "https://github.com/owner/repository"
+    Description: "GitHub URL to be used as a resource tag value."
+    Type: String
+    AllowedPattern: "^https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/?$"
+    ConstraintDescription: "The GitHub URL must start with 'https://github.com/' and can only contain alphanumeric characters, dots, underscores, and hyphens."
+  GitHubWFRunNumber:
+    Default: 1
+    Description: "The Workflow run number to be used as a resource tag value."
+    Type: Number
+  GitHubSHA:
+    Default: "d3b07384d113edec49eaa6238ad5ff00f6fb3796"
+    Description: "The sha value of the last commit to be used as a resource tag value."
+    Type: String
+    AllowedPattern: "^[a-fA-F0-9]{40}$"
+    ConstraintDescription: "The SHA value must be a 40-character hexadecimal string."
+  GitHubRepository:
+    Default: 0001-reponame-py-cft
+    Description: "The GitHub Repository name to be used as a resource tag value."
+    Type: String
+    MinLength: 10
+    MaxLength: 30
+    AllowedPattern: "^\\d{4}-[a-z]+(-[a-z]+)*$"
+    ConstraintDescription: "The repository length should be between 10 and 30, must contain only lowercase letters, numbers, dashes, dots, and should start with a letter."
+  CiBuild:
+    Default: ""
+    Description: "Ci Build of the feature branch to be appended to a resource name."
+    Type: String
+  ###################################### Subnet ####################################################
+  VpcId:
+    Description: "The ID of the VPC."
+    Type: String
+  SubnetCidrBlock:
+    Default: "10.0.0.0/16"
+    Description: "Subnet CIDR Block."
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "The VPC CIDR Block must be in the form x.x.x.x/x."
+  NetworkAclId:
+    Description: "The ID of the Network ACL."
+    Type: String
+    AllowedPattern: "^acl-[a-zA-Z0-9]+$"
+    ConstraintDescription: "The Network ACL ID must be in the form 'acl-' followed by alphanumeric characters."
+  SubnetSequence:
+    Default: 0
+    Description: "The sequence no of the subnet."
+    Type: Number
+    MinValue: 0
+    MaxValue: 6
+  InternetGatewayId:
+    Default: "igw-1234567890abcdef0"
+    Description: "The ID of the attached Internet Gateway."
+    Type: String
+    AllowedPattern: "^igw-[a-zA-Z0-9]+$"
+    ConstraintDescription: "The Internet Gateway ID must be in the form 'igw-' followed by alphanumeric characters."
+  IsPublicSubnet:
+    Default: "false"
+    Description: "Is this a public subnet?"
+    Type: String
+    AllowedValues: ["true", "false"]
+  EnableIPV6Cidr:
+    Default: false
+    Description: "Enable IPV6 Cidr for this Subnet ?."
+    Type: String
+    AllowedValues:
+      - true
+      - false
+######################################## Conditional ###############################################
+Conditions:
+  IsPublicSubnet: !Equals [!Ref IsPublicSubnet, "true"]
+  EnableIPV6Cidr: !Equals [!Ref EnableIPV6Cidr, "true"]
+
+Resources:
+  ###################################### Subnet ####################################################
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref SubnetCidrBlock
+      MapPublicIpOnLaunch: !If
+        - IsPublicSubnet
+        - true
+        - false
+      AvailabilityZone:
+        Fn::Select:
+          - !Ref SubnetSequence
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: !If
+          - IsPublicSubnet
+          - !Sub "${ProjectName}-pub-subnet-${SubnetSequence}${CiBuild}"
+          - !Sub "${ProjectName}-pvt-subnet-${SubnetSequence}${CiBuild}"
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: GitHubRepository
+          Value: !Ref GitHubRepository
+        - Key: GitHubRef
+          Value: !Ref GitHubRef
+        - Key: GitHubURL
+          Value: !Ref GitHubURL
+        - Key: GitHubWFRunNumber
+          Value: !Ref GitHubWFRunNumber
+        - Key: GitHubSHA
+          Value: !Ref GitHubSHA
+  IPv6CidrBlock:
+    Type: AWS::EC2::VPCCidrBlock
+    Condition: EnableIPV6Cidr
+    Properties:
+      VpcId: !Ref VpcId
+      AmazonProvidedIpv6CidrBlock: true
+  SubnetNetworkAclAssociation:
+     Type: AWS::EC2::SubnetNetworkAclAssociation
+     Properties:
+       SubnetId:
+         Ref: Subnet
+       NetworkAclId: !Ref NetworkAclId
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: IsPublicSubnet
+    Properties:
+      VpcId: !Ref VpcId
+      InternetGatewayId: !Ref InternetGatewayId
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+      - Key: Name
+        Value: !If
+        - IsPublicSubnet
+        - !Sub "${ProjectName}-pub-rt-${CiBuild}"
+        - !Sub "${ProjectName}-pvt-rt-${CiBuild}"
+      - Key: ProjectName
+        Value: !Ref ProjectName
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: GitHubRepository
+        Value: !Ref GitHubRepository
+      - Key: GitHubRef
+        Value: !Ref GitHubRef
+      - Key: GitHubURL
+        Value: !Ref GitHubURL
+      - Key: GitHubWFRunNumber
+        Value: !Ref GitHubWFRunNumber
+      - Key: GitHubSHA
+        Value: !Ref GitHubSHA
+  RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+Outputs:
+  VpcId:
+    Description: VPC Id of the Subnet.
+    Value: !GetAtt Subnet.VpcId
+  SubnetId:
+    Description: Subnet Id
+    Value: !Ref Subnet
+  AvailabilityZone:
+    Description: Subnet Availability Zone
+    Value: !GetAtt Subnet.AvailabilityZone
+  AvailabilityZoneId:
+    Description: Subnet Availability ZoneId
+    Value: !GetAtt Subnet.AvailabilityZoneId
+  CidrBlock:
+    Description: Subnet CI/DR Block
+    Value: !GetAtt Subnet.CidrBlock
+  IPV6CidrBlocks:
+    Condition: EnableIPV6Cidr
+    Description: Subnet IPV6 CI/DR Blocks
+    Value: !Select [0, !GetAtt Subnet.Ipv6CidrBlocks]
+  NetworkAclAssociationId:
+    Description: Subnet Network Acl Association Id
+    Value: !GetAtt Subnet.NetworkAclAssociationId
+  SubnetRouteTableAssociationId:
+    Description: Subnet Route Table Association Id
+    Value: !Ref RouteTableAssociation
