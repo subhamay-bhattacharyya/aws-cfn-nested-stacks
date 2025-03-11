@@ -1,0 +1,69 @@
+# This is a basic workflow to help you get started with Actions
+name: Validate and upload CFN Templates to S3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'feature**'
+    paths-ignore:
+      - '**/README.md'
+      - '**/.github/workflows/**.yaml'
+      - '**/CHANGELOG.md'
+      - '**/LICENSE'
+      - '**/VERSION'
+      - '.gitignore'
+
+permissions:
+  id-token: write                       # This is required for aws oidc connection
+  contents: write                       # This is required for actions/checkout
+  pull-requests: write                  # This is required for gh bot to comment PR
+  issues: write                         # This is required for gh bot to comment issues
+
+jobs:
+  start:
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/setup-repository.yaml@main
+    with:
+      deploy-reviewer-test: ${{ vars.ACTION_APPROVER_1}}
+      deploy-reviewer-prod: ${{ vars.ACTION_APPROVER_1 }}
+      pr-approver: ${{ vars.PR_APPROVER }}
+      test-env: false
+      prod-env: false
+    secrets:
+      git-token: ${{ secrets.GIT_TOKEN }}
+
+  validate-cfn-templates:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature')
+    needs: start
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/cfn-validate.yaml@main
+    with:
+      issue-number: ${{ github.run_id }}
+
+  checkov-scan:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature')
+    needs: validate-cfn-templates
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/checkov-scan.yaml@main
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature')
+    needs: checkov-scan
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/release.yaml@main
+
+  create-pr:
+    if: success()
+    needs: release
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/create-pr.yaml@main
+    secrets:
+      git-token: ${{ secrets.GIT_TOKEN }}
+
+  upload-to-s3:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [start]
+    uses: subhamay-bhattacharyya/gh-action-reusable-aws-cfn-wf/.github/workflows/cfn-templ-s3-upload.yaml@main
+    with:
+      aws-region: ${{ vars.AWS_REGION }}
+      aws-role-arn: ${{ vars.DEVL_AWS_ROLE_ARN }}
+      aws-cfn-template-bucket: ${{ vars.CFN_TEMPLATE_S3_BUCKET }}
+      kms-key-arn: ${{ vars.CFN_TEMPLATES_S3_KMS_KEY_ID }}
+
